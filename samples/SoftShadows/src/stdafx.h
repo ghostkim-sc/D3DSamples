@@ -54,6 +54,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <algorithm>
 
 #include "resource.h"
 #include "D3D11SavedState.h"

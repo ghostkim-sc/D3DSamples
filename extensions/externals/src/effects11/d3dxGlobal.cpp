@@ -349,3 +349,13 @@ UINT CDataBlockStore::GetSize()
 {
     return m_Size;
 }
+
+void* __cdecl operator new(size_t s, CDataBlockStore &pAllocator)
+{
+    D3DXASSERT(s <= 0xffffffff);
+    return pAllocator.Allocate((UINT)s);
+}
+
+void __cdecl operator delete(void* p, CDataBlockStore &pAllocator)
+{
+}

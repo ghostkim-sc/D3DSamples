@@ -982,10 +982,10 @@ void SoftShadowsRenderer::drawShadowMap(ID3D11DeviceContext *immediateContext, I
 
     // Draw mesh instances
     {
-        D3DPerfScope perfScope(0xff20A020, L"MeshInstances");
+        D3DPerfScope perfScope2(0xff20A020, L"MeshInstances");
         std::for_each(m_meshInstances.begin(), m_meshInstances.end(), [&] (const MeshInstanceList::value_type &instance)
         {
-            D3DPerfScope perfScope(0xff20A020, instance->getName());
+            D3DPerfScope perfScope3(0xff20A020, instance->getName());
             instance->draw(
                 immediateContext,
                 m_vertexLayout.get(),
@@ -1004,7 +1004,7 @@ void SoftShadowsRenderer::drawScene(ID3D11DeviceContext *immediateContext, ID3DX
 
     // Draw mesh instances
     {
-        D3DPerfScope perfScope(0xff20A020, L"MeshInstances");
+        D3DPerfScope perfScope2(0xff20A020, L"MeshInstances");
         m_useDiffuseVariable->SetBool(true);
         std::for_each(m_meshInstances.begin(), m_meshInstances.end(), [&] (const MeshInstanceList::value_type &instance)
         {
@@ -1013,7 +1013,7 @@ void SoftShadowsRenderer::drawScene(ID3D11DeviceContext *immediateContext, ID3DX
             else
                 m_useTextureVariable->SetInt(0);
 
-            D3DPerfScope perfScope(0xff20A020, instance->getName());
+            D3DPerfScope perfScope3(0xff20A020, instance->getName());
             instance->draw(
                 immediateContext,
                 m_vertexLayout.get(),
