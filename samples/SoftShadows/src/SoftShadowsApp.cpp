@@ -120,7 +120,9 @@ SoftShadowsApp::SoftShadowsApp()
     CDXUTComboBox *techniqueComboBox;
     m_hud.AddStatic(IDC_TECHNIQUE_STATIC, L"Shadow Technique", 30, iY += 24, 135, 22);
     m_hud.AddComboBox(IDC_TECHNIQUE_COMBOBOX, 35, iY += 24, 135, 22, 'T', false, &techniqueComboBox);
+    // the order should match "ShadowTechnique" struct
     techniqueComboBox->AddItem(L"None", nullptr);
+    techniqueComboBox->AddItem(L"Projection", nullptr);
     techniqueComboBox->AddItem(L"PCSS", nullptr);
     techniqueComboBox->AddItem(L"PCF", nullptr);
     techniqueComboBox->AddItem(L"CHS", nullptr);
@@ -139,7 +141,7 @@ SoftShadowsApp::SoftShadowsApp()
     DXUTInit(true, true, nullptr); // Parse the command line, show msgboxes on error, no extra command line params
     DXUTSetCursorSettings(true, true); // Show the cursor and clip it when in full screen
     DXUTCreateWindow(L"Soft Shadows");
-    DXUTCreateDevice(D3D_FEATURE_LEVEL_10_0, true, 1024, 768);
+    DXUTCreateDevice(D3D_FEATURE_LEVEL_11_0, true, 1024, 768);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -457,7 +459,7 @@ void SoftShadowsApp::renderText()
     m_renderer.getSceneStats(numIndices, numVerts, lightRes);
     UINT kTris = (UINT)(numIndices / 3000L);
     m_textHelper->DrawFormattedTextLine(L"NumTris: %dk - LightRes: %d", kTris, lightRes);
-
+    m_textHelper->DrawFormattedTextLine(L"Light Position: (%.2f, %.2f, %.2f)", m_renderer.getLastLightPos().x, m_renderer.getLastLightPos().y, m_renderer.getLastLightPos().z);
     if (m_showHelp)
     {
         UINT backBufferHeight = (DXUTIsAppRenderingWithD3D9()) ? DXUTGetD3D9BackBufferSurfaceDesc()->Height : DXUTGetDXGIBackBufferSurfaceDesc()->Height;

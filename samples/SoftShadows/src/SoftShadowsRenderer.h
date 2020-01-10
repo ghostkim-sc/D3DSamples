@@ -144,6 +144,7 @@ public:
     enum ShadowTechnique
     {
         None = 0,
+        Projection,
         PCSS,
         PCF,
         CHS
@@ -181,6 +182,8 @@ public:
     // Stats
     void getSceneStats(UINT64 &numIndices, UINT64 &numVertices, UINT &lightResolution) const;
 
+    // For debugging
+    D3DXVECTOR3& getLastLightPos() { return m_lastLightCenterWorld; }
 private:
 
     class SimpleMeshInstance;
@@ -204,7 +207,7 @@ private:
     ID3DX11EffectVariable *getVariable(const char *name);
 
     void drawShadowMap(ID3D11DeviceContext *immediateContext, ID3DX11EffectPass *pass);
-    void drawScene(ID3D11DeviceContext *immediateContext, ID3DX11EffectPass *pass);
+    //void drawScene(ID3D11DeviceContext *immediateContext, ID3DX11EffectPass *pass);
     void drawMeshes(ID3D11DeviceContext *immediateContext, ID3DX11EffectPass *pass);
     void drawGround(ID3D11DeviceContext *immediateContext, ID3DX11EffectPass *pass);
 
@@ -276,6 +279,9 @@ private:
     std::unique_ptr<SimpleTexture2D> m_groundDiffuse;
     std::unique_ptr<SimpleTexture2D> m_groundNormal;
 
+    // etc variables
+    ID3DX11EffectMatrixVariable *m_planarShadowProjVariable;
+
     unsigned int m_frameNumber;
 
     D3DXCOLOR m_backgroundColor;
@@ -289,4 +295,7 @@ private:
     bool m_reloadEffect;
     bool m_useTexture;
     bool m_visualizeDepthTexture;
+
+    // For debugging
+    D3DXVECTOR3 m_lastLightCenterWorld;
 };

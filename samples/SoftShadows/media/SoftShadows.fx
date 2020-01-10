@@ -31,6 +31,9 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 //----------------------------------------------------------------------------------
+
+#pragma enable_d3d11_debug_symbols
+
 #include "Common.fxh"
 #include "PercentageCloserSoftShadows.fxh"
 #include "ContactHardeningShadows.fxh"
@@ -120,6 +123,28 @@ Z_VSOut LightRender_VS ( Geometry_VSIn IN )
     return OUT;
 }
 
+//-------------------------------------------------------------------------------------
+
+struct ProjShadows_VSOut
+{
+    float4 pos : SV_Position;
+};
+
+// vertices projects onto y=0 plane
+ProjShadows_VSOut ProjShadows_VS(Geometry_VSIn IN)
+{
+    ProjShadows_VSOut OUT;
+    float4 WorldPos = mul(IN.Pos, g_world);
+    float4 WorldPosToGround = mul(WorldPos, g_planarShadowProj);
+	OUT.pos = mul(WorldPosToGround, g_viewProj);
+
+    return OUT;
+}
+
+float4 ProjShadows_PS(ProjShadows_VSOut IN) : SV_Target
+{
+    return float4(0, 0, 0, 1);
+}
 //--------------------------------------------------------------------------------------
 
 technique11 SoftShadows
@@ -196,4 +221,13 @@ technique11 SoftShadows
 		SetDepthStencilState(ZTestEqual_DS, 0x00000000);
 		SetBlendState(NoBlending_BS, float4(1.0f, 1.0f, 1.0f, 1.0f), 0xffffffff);
 	}
+    pass ProjectionShadows
+    {
+        SetVertexShader(CompileShader(vs_5_0, ProjShadows_VS()));
+        SetGeometryShader(NULL);
+        SetPixelShader(CompileShader(ps_5_0, ProjShadows_PS()));
+        SetRasterizerState(EyeRender_RS);
+        SetDepthStencilState(NoZTest_WRITE_DS, 0x00000000);
+        SetBlendState(NoBlending_BS, float4(1.0f, 1.0f, 1.0f, 1.0f), 0xffffffff);
+    }
 }

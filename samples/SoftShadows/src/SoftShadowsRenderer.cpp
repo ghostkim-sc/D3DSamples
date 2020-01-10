@@ -297,7 +297,7 @@ SoftShadowsRenderer::SoftShadowsRenderer()
     , m_groundDiffuse()
     , m_groundNormal()
     , m_frameNumber(0)
-    , m_backgroundColor(0.0f, 0.0f, 0.0f, 0.0f)
+    , m_backgroundColor(1.0f, 0.0f, 0.0f, 0.0f)
     , m_worldHeightOffset(0.2f)
     , m_worldWidthOffset(0.2f)
     , m_pcssPreset(Poisson_64_128)
@@ -305,6 +305,8 @@ SoftShadowsRenderer::SoftShadowsRenderer()
     , m_reloadEffect(false)
     , m_useTexture(true)
     , m_visualizeDepthTexture(false)
+    , m_lastLightCenterWorld(0.0f, 0.0f, 0.0f)
+    , m_planarShadowProjVariable(nullptr)
 {
     m_lightViewport.Width  = LIGHT_RES;
     m_lightViewport.Height = LIGHT_RES;
@@ -430,11 +432,11 @@ void SoftShadowsRenderer::onRender(ID3D11Device *device, ID3D11DeviceContext *im
     // frame counter
     m_frameNumber++;
 
-    //
+
     // STEP 1: render shadow map from the light's point of view
     //
 
-    if (m_shadowTechnique != None || m_visualizeDepthTexture)
+    if ((m_shadowTechnique != None && m_shadowTechnique != Projection) || m_visualizeDepthTexture)
     {
         immediateContext->ClearDepthStencilView(m_shadowMap->getDepthStencilView(), D3D11_CLEAR_DEPTH, 1.0, 0);
         immediateContext->RSSetViewports(1, &m_lightViewport);
@@ -446,6 +448,7 @@ void SoftShadowsRenderer::onRender(ID3D11Device *device, ID3D11DeviceContext *im
         const char *passName = nullptr;
         switch (m_shadowTechnique)
         {
+        default:
         case PCSS: // fallthrough
         case PCF:  passName = "ShadowMapPass"; break;
         case CHS:  passName = "ShadowMapPassCHS"; break;
@@ -463,12 +466,14 @@ void SoftShadowsRenderer::onRender(ID3D11Device *device, ID3D11DeviceContext *im
 
     ID3D11RenderTargetView *rt = DXUTGetD3D11RenderTargetView();
     ID3D11DepthStencilView *ds = DXUTGetD3D11DepthStencilView();
-
+    
+    immediateContext->OMSetRenderTargets(1, &rt, ds);
+    immediateContext->RSSetViewports(1, &m_viewport);
+        
     immediateContext->ClearRenderTargetView(rt, m_backgroundColor);
     immediateContext->ClearDepthStencilView(ds, D3D11_CLEAR_DEPTH, 1.0, 0);
 
-    immediateContext->OMSetRenderTargets(1, &rt, ds);
-    immediateContext->RSSetViewports(1, &m_viewport);
+    //
 
     m_depthMapVariable->SetResource(m_shadowMap->getShaderResourceView());
 
@@ -480,16 +485,27 @@ void SoftShadowsRenderer::onRender(ID3D11Device *device, ID3D11DeviceContext *im
     else
     {
         // To reduce overdraw, do a depth prepass to layout z, followed by a shading pass
-        drawScene(immediateContext, m_technique->GetPassByName("ZPrepass"));
+        drawMeshes(immediateContext, m_technique->GetPassByName("ZPrepass"));
+        drawGround(immediateContext, m_technique->GetPassByName("ZPrepass"));
+        
+        // regular rendering with / without shadow map
         const char *passName = nullptr;
         switch (m_shadowTechnique)
         {
+        default:
         case None: passName = "ZEqualNoShadows"; break;
         case PCSS: passName = "ZEqualPCSS"; break;
         case PCF:  passName = "ZEqualPCF"; break;
         case CHS:  passName = "CHS"; break;
         }
-        drawScene(immediateContext, m_technique->GetPassByName(passName));
+        drawGround(immediateContext, m_technique->GetPassByName(passName));
+
+        if (m_shadowTechnique == Projection)
+        {
+            drawMeshes(immediateContext, m_technique->GetPassByName("ProjectionShadows"));
+        }
+        drawMeshes(immediateContext, m_technique->GetPassByName(passName));
+
     }
 }
 
@@ -598,6 +614,37 @@ void SoftShadowsRenderer::updateLightCamera()
     updateLightCamera(s_view);
 }
 
+void buildProj2PlanerMat(D3DXMATRIX& proj2PlanerMat, D3DXVECTOR3 normal, D3DXVECTOR3 lightPos, float d)
+{
+    const float nxlx = normal.x * lightPos.x;
+    const float nyly = normal.y * lightPos.y;
+    const float nzlz = normal.z * lightPos.z;
+    const float nylx = normal.y * lightPos.x;
+    const float nzlx = normal.z * lightPos.x;
+    const float nxly = normal.x * lightPos.y;
+    const float nzly = normal.z * lightPos.y;
+    const float nxlz = normal.x * lightPos.z;
+    const float nylz = normal.y * lightPos.z;
+    const float dot_n_l = nxlx + nyly + nzlz;
+    const float dlx = d * lightPos.x;
+    const float dly = d * lightPos.y;
+    const float dlz = d * lightPos.z;
+    const float nx = normal.x;
+    const float ny = normal.y;
+    const float nz = normal.z;
+#if 0
+    proj2PlanerMat._11 = dot_n_l + d - nxlx; proj2PlanerMat._12 = -nylx;              proj2PlanerMat._13 = -nzlx;              proj2PlanerMat._14 = -dlx;
+    proj2PlanerMat._21 = -nxly;              proj2PlanerMat._22 = dot_n_l + d - nyly; proj2PlanerMat._23 = -nzly;              proj2PlanerMat._24 = -dly;
+    proj2PlanerMat._31 = -nxlz;              proj2PlanerMat._32 = -nylz;              proj2PlanerMat._33 = dot_n_l + d - nzlz; proj2PlanerMat._34 = -dlz;
+    proj2PlanerMat._41 = -nx;                proj2PlanerMat._42 = -ny;                proj2PlanerMat._43 = -nz;                proj2PlanerMat._44 = dot_n_l;
+
+#else
+    proj2PlanerMat._11 = dot_n_l + d - nxlx; proj2PlanerMat._21 = -nylx;              proj2PlanerMat._31 = -nzlx;              proj2PlanerMat._41 = -dlx;
+    proj2PlanerMat._12 = -nxly;              proj2PlanerMat._22 = dot_n_l + d - nyly; proj2PlanerMat._32 = -nzly;              proj2PlanerMat._42 = -dly;
+    proj2PlanerMat._13 = -nxlz;              proj2PlanerMat._23 = -nylz;              proj2PlanerMat._33 = dot_n_l + d - nzlz; proj2PlanerMat._43 = -dlz;
+    proj2PlanerMat._14 = -nx;                proj2PlanerMat._24 = -ny;                proj2PlanerMat._34 = -nz;                proj2PlanerMat._44 = dot_n_l;
+#endif
+}
 ////////////////////////////////////////////////////////////////////////////////
 // SoftShadowsRenderer::updateLightCamera()
 ////////////////////////////////////////////////////////////////////////////////
@@ -617,8 +664,8 @@ void SoftShadowsRenderer::updateLightCamera(const D3DXMATRIX &view)
     D3DXVECTOR3 bbox[2];
     transformBoundingBox(bbox, box, view);
 
-    float frustumWidth = std::max(fabs(bbox[0][0]), fabs(bbox[1][0])) * 2.0f;
-    float frustumHeight = std::max(fabs(bbox[0][1]), fabs(bbox[1][1])) * 2.0f;
+    float frustumWidth = (float)std::max(fabs(bbox[0][0]), fabs(bbox[1][0])) * 2.0f;
+    float frustumHeight = (float)std::max(fabs(bbox[0][1]), fabs(bbox[1][1])) * 2.0f;
     float zNear = bbox[0][2];
     float zFar = LIGHT_ZFAR;
 
@@ -649,6 +696,11 @@ void SoftShadowsRenderer::updateLightCamera(const D3DXMATRIX &view)
     D3DXMatrixInverse(&inverseView, nullptr, &view);
     D3DXVec3TransformCoord(&lightCenterWorld, &lightCenterEye, &inverseView);
     V(m_lightPosVariable->SetFloatVector(lightCenterWorld));
+    m_lastLightCenterWorld = lightCenterWorld;
+
+    D3DXMATRIX planarShadowProj;
+    buildProj2PlanerMat(planarShadowProj, D3DXVECTOR3(0, 1, 0), lightCenterWorld, 0.352);
+    V(m_planarShadowProjVariable->SetMatrix(planarShadowProj));
 
     // Update the light size
     updateLightSize(frustumWidth, frustumHeight);
@@ -855,6 +907,10 @@ HRESULT SoftShadowsRenderer::loadEffect(ID3D11Device* device)
     m_normalVariable = getShaderResourceVariable("g_normalTexture");
     m_specularVariable = getShaderResourceVariable("g_specularTexture");
 
+    // Get etc variables
+    m_planarShadowProjVariable = getMatrixVariable("g_planarShadowProj");
+    VB_RETURN(m_planarShadowProjVariable && m_planarShadowProjVariable->IsValid());
+
     // Update the light
     updateLightCamera();
 
@@ -892,6 +948,7 @@ void SoftShadowsRenderer::releaseEffect()
     m_diffuseVariable = nullptr;
     m_normalVariable = nullptr;
     m_specularVariable = nullptr;
+    m_planarShadowProjVariable = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -996,12 +1053,10 @@ void SoftShadowsRenderer::drawShadowMap(ID3D11DeviceContext *immediateContext, I
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// SoftShadowsRenderer::drawScene()
+// SoftShadowsRenderer::drawMeshes()
 ////////////////////////////////////////////////////////////////////////////////
-void SoftShadowsRenderer::drawScene(ID3D11DeviceContext *immediateContext, ID3DX11EffectPass *pass)
+void SoftShadowsRenderer::drawMeshes(ID3D11DeviceContext *immediateContext, ID3DX11EffectPass *pass)
 {
-    D3DPerfScope perfScope(0xff20A020, L"DrawScene");
-
     // Draw mesh instances
     {
         D3DPerfScope perfScope2(0xff20A020, L"MeshInstances");
@@ -1024,9 +1079,6 @@ void SoftShadowsRenderer::drawScene(ID3D11DeviceContext *immediateContext, ID3DX
                 m_specularVariable);
         });
     }
-
-    // Draw ground
-    drawGround(immediateContext, pass);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

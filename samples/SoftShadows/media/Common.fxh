@@ -114,6 +114,14 @@ DepthStencilState ZTestEqual_DS
     DepthWriteMask = ZERO;
 };
 
+DepthStencilState NoZTest_WRITE_DS
+{
+    DepthEnable = FALSE;
+    DepthFunc = LESS;
+    DepthWriteMask = ALL;
+};
+
+
 BlendState NoBlending_BS
 {
     BlendEnable[0] = FALSE;
@@ -162,6 +170,7 @@ row_major float4x4 g_viewProj;
 row_major float4x4 g_lightView;
 row_major float4x4 g_lightViewProj;
 row_major float4x4 g_lightViewProjClip2Tex;
+row_major float4x4 g_planarShadowProj;
 
 //--------------------------------------------------------------------------------------
 
